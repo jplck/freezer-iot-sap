@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using Microsoft.AspNetCore.Mvc;
 
 namespace DemonstratorFuncs
 {
@@ -39,8 +40,6 @@ namespace DemonstratorFuncs
         public string ConnectionDeviceGenerationId { get; set; }
 
     }
-
-
     public class AKSPayload
     {
         [JsonProperty("deviceId")]
@@ -53,10 +52,10 @@ namespace DemonstratorFuncs
         public bool Classificiation;
     }
 
-    public static class Function1
+    public static class Orchestrate
     {
         [FunctionName("ModelValidator")]
-        public static async Task ModelValidatorTriggerAsync(
+        public static async Task<IActionResult> ModelValidatorTriggerAsync(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "validate")] HttpRequest req,
             [DurableClient] IDurableOrchestrationClient client,
             ILogger log)
@@ -64,9 +63,19 @@ namespace DemonstratorFuncs
             StreamReader reader = new StreamReader(req.Body);
             string body = reader.ReadToEnd();
 
-            var convertedPayload = JsonConvert.DeserializeObject<StreamAnalyticsPayload>(body);
+            StreamAnalyticsPayload convertedPayload;
 
-            string instanceId = await client.StartNewAsync("ModelOrchestrator", convertedPayload);
+            try {
+                convertedPayload = JsonConvert.DeserializeObject<StreamAnalyticsPayload>(body);
+            }
+            catch (JsonException jsonException) 
+            {
+                log.LogError(jsonException.Message);
+                return await Task.FromResult(new BadRequestResult());
+            }
+
+            await client.StartNewAsync("ModelOrchestrator", convertedPayload);
+            return await Task.FromResult(new AcceptedResult("validate", $"Model has been called."));
         }
 
         [FunctionName("ModelOrchestrator")]
@@ -87,17 +96,32 @@ namespace DemonstratorFuncs
         {
             var endpointUrl = Environment.GetEnvironmentVariable("MLENDPOINT");
             var jsonPayload = JsonConvert.SerializeObject(payloadFromStreamAnalytics);
-            
-            var client = new HttpClient();
-            var data = new StringContent(jsonPayload, Encoding.UTF8);
-            data.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
-            var response = await client.PostAsync(endpointUrl, data);
+            if (string.IsNullOrWhiteSpace(endpointUrl)) 
+            {
+                throw new FunctionFailedException("Endpoint should not be null. Please set a endpoint in environment.");
+            }
 
-            string result = response.Content.ReadAsStringAsync().Result;
-            Console.WriteLine(result);
-            var deSerializedResult = JsonConvert.DeserializeObject<AKSPayload>(jsonPayload);
-            return deSerializedResult;
+            try
+            {
+                var client = new HttpClient();
+                var data = new StringContent(jsonPayload, Encoding.UTF8);
+                data.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+
+                var response = await client.PostAsync(endpointUrl, data);
+
+                string result = response.Content.ReadAsStringAsync().Result;
+                var deSerializedResult = JsonConvert.DeserializeObject<AKSPayload>(jsonPayload);
+                 return deSerializedResult;
+            }
+            catch(HttpRequestException httpEx)
+            {
+                throw new FunctionFailedException($"Unable to send request to MLEndpoint. ({httpEx.Message})");
+            }
+            catch(JsonException jsonException)
+            {
+                throw new FunctionFailedException($"Unable to deserialize data. ({jsonException.Message})");
+            }
         }
 
         [FunctionName("ValidateClassification")]
