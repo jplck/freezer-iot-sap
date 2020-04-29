@@ -82,15 +82,19 @@ namespace DemonstratorFuncs
         [FunctionName("ModelOrchestrator")]
         public static async Task ModelOrchestratorAsync(
             [OrchestrationTrigger] IDurableOrchestrationContext context,
-            [ServiceBus("odataqueue", Connection = "ODataServiceBusConnection", EntityType = EntityType.Queue)] IAsyncCollector<string> queueCollector,
             ILogger log)
         {
             var input = context.GetInput<StreamAnalyticsPayload>();
 
             var retryOptions = new RetryOptions(new TimeSpan(0, 0, 15), 5);
             var modelResults = await context.CallActivityWithRetryAsync<AKSPayload>("CallModel", retryOptions, input);
-            //await context.CallActivityAsync("ValidateClassification", modelResults);
-            await queueCollector.AddAsync("test");
+            var validationResult = await context.CallActivityAsync<bool>("ValidateClassification", modelResults);
+            
+            if (validationResult)
+            {
+                await context.CallActivityAsync<bool>("PushOData", modelResults);
+            }
+
             //var validateModelResults = await context.CallActivityAsync<bool>("ValidateClassification", modelResults);
         }
 
@@ -128,10 +132,23 @@ namespace DemonstratorFuncs
         }
 
         [FunctionName("ValidateClassification")]
-        public static Task ValidateClassification([ActivityTrigger] AKSPayload classificaiton, ILogger log)
+        public static Task<bool> ValidateClassification([ActivityTrigger] AKSPayload classificaiton,
+            ILogger log)
         {
-            //validate classifcation and send notification to phone or sap.
-            return Task.FromResult(200);
+            //Do validation of classification results from AKS
+            return Task.FromResult(true);
+        }
+
+        [FunctionName("PushOData")]
+        public static async Task<bool> PushOData([ActivityTrigger] AKSPayload classificaiton,
+            [ServiceBus("odataqueue",
+                        Connection = "ODataServiceBusConnection",
+                        EntityType = EntityType.Queue)] IAsyncCollector<string> queueCollector,
+            ILogger log)
+        {
+            log.LogDebug("Data send onto ServiceBus Queue");
+            await queueCollector.AddAsync(JsonConvert.SerializeObject(classificaiton));
+            return true;
         }
 
     }
