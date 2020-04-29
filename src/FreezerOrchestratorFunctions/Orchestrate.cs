@@ -12,6 +12,7 @@ using System.Text;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Azure.WebJobs.ServiceBus;
 
 namespace DemonstratorFuncs
 {
@@ -81,14 +82,16 @@ namespace DemonstratorFuncs
         [FunctionName("ModelOrchestrator")]
         public static async Task ModelOrchestratorAsync(
             [OrchestrationTrigger] IDurableOrchestrationContext context,
+            [ServiceBus("odataqueue", Connection = "ODataServiceBusConnection", EntityType = EntityType.Queue)] IAsyncCollector<string> queueCollector,
             ILogger log)
         {
             var input = context.GetInput<StreamAnalyticsPayload>();
 
             var retryOptions = new RetryOptions(new TimeSpan(0, 0, 15), 5);
             var modelResults = await context.CallActivityWithRetryAsync<AKSPayload>("CallModel", retryOptions, input);
-
-            var validateModelResults = await context.CallActivityAsync<bool>("ValidateClassification", modelResults);
+            //await context.CallActivityAsync("ValidateClassification", modelResults);
+            await queueCollector.AddAsync("test");
+            //var validateModelResults = await context.CallActivityAsync<bool>("ValidateClassification", modelResults);
         }
 
         [FunctionName("CallModel")]
@@ -125,10 +128,10 @@ namespace DemonstratorFuncs
         }
 
         [FunctionName("ValidateClassification")]
-        public static bool ValidateClassification([ActivityTrigger] AKSPayload classificaiton, ILogger log)
+        public static Task ValidateClassification([ActivityTrigger] AKSPayload classificaiton, ILogger log)
         {
             //validate classifcation and send notification to phone or sap.
-            return true;
+            return Task.FromResult(200);
         }
 
     }
