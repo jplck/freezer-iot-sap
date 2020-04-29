@@ -43,14 +43,20 @@ namespace DemonstratorFuncs
     }
     public class AKSPayload
     {
-        [JsonProperty("deviceId")]
+        [JsonProperty("ConnectionDeviceId")]
         public string DeviceId { get; set; }
 
-        [JsonProperty("ts")]
-        public DateTime TimeStamp;
+        [JsonProperty("timestamp")]
+        public DateTime TimeStamp { get; set; }
 
-        [JsonProperty("classificiation")]
-        public bool Classificiation;
+        [JsonProperty("hasError")]
+        public bool HasError { get; set; }
+
+        [JsonProperty("result")]
+        public bool Result { get; set; }
+
+        [JsonProperty("errorMessage")]
+        public string ErrorMessage { get; set; }
     }
 
     public static class Orchestrate
@@ -132,11 +138,11 @@ namespace DemonstratorFuncs
         }
 
         [FunctionName("ValidateClassification")]
-        public static Task<bool> ValidateClassification([ActivityTrigger] AKSPayload classificaiton,
+        public static Task<bool> ValidateClassification([ActivityTrigger] AKSPayload classification,
             ILogger log)
         {
             //Do validation of classification results from AKS
-            return Task.FromResult(true);
+            return Task.FromResult(classification.Result);
         }
 
         [FunctionName("PushOData")]
