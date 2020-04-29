@@ -46,8 +46,11 @@ namespace DemonstratorFuncs
         [JsonProperty("ConnectionDeviceId")]
         public string DeviceId { get; set; }
 
-        [JsonProperty("timestamp")]
-        public DateTime TimeStamp { get; set; }
+        [JsonProperty("timeCreatedStart")]
+        public DateTime TimeCreatedStart { get; set; }
+
+        [JsonProperty("timeCreatedEnd")]
+        public DateTime TimeCreatedEnd { get; set; }
 
         [JsonProperty("hasError")]
         public bool HasError { get; set; }
@@ -100,8 +103,6 @@ namespace DemonstratorFuncs
             {
                 await context.CallActivityAsync<bool>("PushOData", modelResults);
             }
-
-            //var validateModelResults = await context.CallActivityAsync<bool>("ValidateClassification", modelResults);
         }
 
         [FunctionName("CallModel")]
